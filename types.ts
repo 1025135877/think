@@ -15,6 +15,7 @@ export interface NPC {
   description: string;
   personality: string; // Instructions for AI roleplay
   avatarUrl?: string;
+  visualSummary?: string;
 }
 
 export interface Clue {

@@ -1,11 +1,49 @@
-
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { MysteryData, JudgeResponse, AnswerType, EndingEvaluation } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const MODEL_NAME = 'gemini-2.5-flash';
+const IMAGE_MODEL_NAME = 'imagen-4.0-generate-001';
+
+/**
+ * Helper to get the API Key.
+ * Prioritizes LocalStorage (user input) -> Process Env (build time)
+ */
+const getApiKey = (): string => {
+  const localKey = localStorage.getItem("gemini_api_key");
+  if (localKey) return localKey;
+  return process.env.API_KEY || "";
+};
+
+/**
+ * Generates a single image using Imagen based on a prompt.
+ */
+const generateImage = async (prompt: string): Promise<string | undefined> => {
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return undefined;
+
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const response = await ai.models.generateImages({
+      model: IMAGE_MODEL_NAME,
+      prompt: `A dark, atmospheric, moody portrait of a character for a mystery detective game. ${prompt} High quality, digital art style.`,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: 'image/jpeg',
+        aspectRatio: '1:1',
+      },
+    });
+    
+    const base64String = response.generatedImages?.[0]?.image?.imageBytes;
+    if (base64String) {
+      return `data:image/jpeg;base64,${base64String}`;
+    }
+    return undefined;
+  } catch (error) {
+    console.error("Image generation failed:", error);
+    return undefined;
+  }
+};
 
 /**
  * Generates a new Detective Mystery with NPCs, Clues, and Endings in Chinese.
@@ -27,7 +65,8 @@ export const generateMystery = async (): Promise<MysteryData> => {
             name: { type: Type.STRING },
             role: { type: Type.STRING },
             description: { type: Type.STRING },
-            personality: { type: Type.STRING, description: "How this NPC speaks and acts." }
+            personality: { type: Type.STRING, description: "How this NPC speaks and acts." },
+            visualSummary: { type: Type.STRING, description: "A detailed visual description of the character's face and clothing in English. Used for generating a portrait." }
           }
         }
       },
@@ -66,16 +105,18 @@ export const generateMystery = async (): Promise<MysteryData> => {
     2. **NPCs**: Create exactly 3 NPCs involved in the case (e.g., Witness, Suspect, Expert). 
        - They should have distinct personalities.
        - One might be lying or hiding something.
+       - Provide a 'visualSummary' in English for each NPC to generate an image.
     3. **Clues**: Create 4-5 specific facts/clues that players can discover by asking the right questions.
     4. **Endings**:
        - BAD: Player accuses the wrong person or misses the point entirely.
        - NEUTRAL: Player finds the culprit but misses the motive/method.
        - GOOD: Player uncovers the complete truth (The 'Solution').
        
-    The output must be in JSON. All text fields (title, situation, dialogue, descriptions) must be in Chinese.
+    The output must be in JSON. All text fields (title, situation, dialogue, descriptions) must be in Chinese, EXCEPT 'visualSummary' which must be in English.
   `;
 
   try {
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
@@ -90,8 +131,17 @@ export const generateMystery = async (): Promise<MysteryData> => {
     if (!text) throw new Error("No text returned from Gemini");
     
     const data = JSON.parse(text) as MysteryData;
+    
     // Ensure all clues start locked
     data.clues = data.clues.map(c => ({ ...c, isLocked: true }));
+
+    // Generate Images for NPCs
+    await Promise.all(data.npcs.map(async (npc) => {
+        if (npc.visualSummary) {
+            npc.avatarUrl = await generateImage(npc.visualSummary);
+        }
+    }));
+
     return data;
 
   } catch (error) {
@@ -153,6 +203,7 @@ export const judgeInput = async (
   `;
 
   try {
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
@@ -215,6 +266,7 @@ export const evaluateSolution = async (
   `;
 
   try {
+     const ai = new GoogleGenAI({ apiKey: getApiKey() });
      const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,

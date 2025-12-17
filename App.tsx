@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { generateMystery, judgeInput, evaluateSolution } from './services/geminiService';
 import { MysteryCard } from './components/MysteryCard';
@@ -7,17 +6,63 @@ import { InputArea } from './components/InputArea';
 import { GamePhase, MysteryData, ChatMessage, AnswerType, Clue, EndingEvaluation } from './types';
 
 function App() {
+  const [hasApiKey, setHasApiKey] = useState(false);
   const [phase, setPhase] = useState<GamePhase>(GamePhase.IDLE);
   const [mystery, setMystery] = useState<MysteryData | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTarget, setActiveTarget] = useState<string>('GM'); // 'GM' or NPC ID
+  const [manualKey, setManualKey] = useState('');
   
   // New State for Features
   const [unlockedClues, setUnlockedClues] = useState<Set<string>>(new Set());
   const [showCluePanel, setShowCluePanel] = useState(false);
   const [finalTheory, setFinalTheory] = useState('');
   const [endingResult, setEndingResult] = useState<EndingEvaluation | null>(null);
+
+  // Check for API Key on mount
+  useEffect(() => {
+    const checkApiKey = async () => {
+      // 1. Check AI Studio Environment
+      if (window.aistudio) {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        if (hasKey) {
+            setHasApiKey(true);
+            return;
+        }
+      }
+      
+      // 2. Check LocalStorage (Manual Entry)
+      const localKey = localStorage.getItem("gemini_api_key");
+      if (localKey) {
+        setHasApiKey(true);
+        return;
+      }
+
+      // 3. Check Process Env
+      if (process.env.API_KEY) {
+        setHasApiKey(true);
+        return;
+      }
+
+      setHasApiKey(false);
+    };
+    checkApiKey();
+  }, []);
+
+  const handleSelectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true);
+    }
+  };
+
+  const handleSaveManualKey = () => {
+      if (manualKey.trim()) {
+          localStorage.setItem("gemini_api_key", manualKey.trim());
+          setHasApiKey(true);
+      }
+  };
 
   const startNewGame = useCallback(async () => {
     setPhase(GamePhase.LOADING);
@@ -43,17 +88,31 @@ function App() {
       }]);
 
       setPhase(GamePhase.PLAYING);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error starting game:", error);
-      setPhase(GamePhase.FAILED);
+      
+      // Error handling for API Key issues
+      const errString = error.toString().toLowerCase();
+      if (errString.includes("api key") || errString.includes("400") || error.status === 400 || error.message?.includes('API key')) {
+        // Clear invalid key
+        localStorage.removeItem("gemini_api_key");
+        setHasApiKey(false);
+        setPhase(GamePhase.IDLE);
+        alert("API Key 无效或过期，请重新输入。");
+      } else {
+        setPhase(GamePhase.FAILED);
+      }
     } finally {
       setIsProcessing(false);
     }
   }, []);
 
+  // Only auto-start if key is present and we are idle
   useEffect(() => {
-    startNewGame();
-  }, [startNewGame]);
+    if (hasApiKey && phase === GamePhase.IDLE) {
+      startNewGame();
+    }
+  }, [hasApiKey, phase, startNewGame]);
 
   const handlePlayerInput = async (text: string) => {
     if (!mystery || phase !== GamePhase.PLAYING) return;
@@ -126,8 +185,70 @@ function App() {
     }
   };
 
-  // Helper to get active NPC object
-  const activeNPC = mystery?.npcs.find(n => n.id === activeTarget);
+  if (!hasApiKey) {
+    return (
+      <div className="flex h-screen w-full bg-mystery-900 items-center justify-center p-4 animate-fade-in">
+        <div className="bg-mystery-800 p-8 rounded-2xl border border-mystery-700 shadow-[0_0_30px_rgba(0,0,0,0.5)] max-w-md w-full text-center space-y-8 relative overflow-hidden">
+          {/* Decorative background element */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-mystery-accent to-transparent opacity-50"></div>
+          
+          <div className="w-20 h-20 bg-mystery-700/50 rounded-full flex items-center justify-center mx-auto border border-mystery-600 shadow-inner">
+            <span className="text-4xl filter drop-shadow-lg">🕵️</span>
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-3xl font-serif font-bold text-slate-100 tracking-wide">Enigma AI</h1>
+            <p className="text-mystery-accent text-sm font-bold tracking-widest uppercase opacity-80">沉浸式推理游戏</p>
+          </div>
+
+          <div className="space-y-4">
+             <p className="text-slate-400 text-sm leading-relaxed">
+                欢迎来到 Enigma。要开始这段由 AI 生成的推理之旅，请先连接您的 API 密钥。
+            </p>
+
+            {/* AI Studio Key Selection */}
+            {window.aistudio && (
+                <button 
+                    onClick={handleSelectKey}
+                    className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5"
+                >
+                    🔑 使用 Google AI Studio 连接
+                </button>
+            )}
+
+            {/* Manual Key Entry Fallback */}
+            {!window.aistudio && (
+                <div className="space-y-3 pt-2">
+                    <input 
+                        type="password" 
+                        value={manualKey}
+                        onChange={(e) => setManualKey(e.target.value)}
+                        placeholder="输入 Gemini API Key (以 AIza 开头)"
+                        className="w-full px-4 py-3 bg-mystery-900 border border-mystery-700 rounded-lg text-slate-200 text-sm focus:border-mystery-accent focus:outline-none"
+                    />
+                    <button 
+                        onClick={handleSaveManualKey}
+                        disabled={!manualKey.trim()}
+                        className="w-full py-3 bg-mystery-700 hover:bg-mystery-600 disabled:opacity-50 text-white font-bold rounded-lg transition-colors border border-mystery-600"
+                    >
+                        开始游戏
+                    </button>
+                </div>
+            )}
+          </div>
+          
+          <div className="text-[10px] text-slate-600 border-t border-mystery-700 pt-4 mt-4">
+             <p>本游戏使用 Google Gemini 2.5 & Imagen 3 模型</p>
+             <p className="mt-1">
+               <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="underline hover:text-slate-400 transition-colors">
+                 获取 Gemini API Key
+               </a>
+             </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full bg-mystery-900 font-sans overflow-hidden">
@@ -143,7 +264,7 @@ function App() {
         </div>
 
         {/* TARGET SELECTION */}
-        <div className="p-4 space-y-3 overflow-y-auto flex-1">
+        <div className="p-4 space-y-3 overflow-y-auto flex-1 custom-scrollbar">
             {phase === GamePhase.PLAYING && mystery && (
                 <div className="space-y-2">
                     <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">选择询问对象</p>
@@ -299,6 +420,14 @@ function App() {
                  >
                     开始新游戏
                  </button>
+            </div>
+        ) : phase === GamePhase.FAILED ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
+                <p className="text-rose-500 font-bold">生成游戏失败</p>
+                <div className="text-xs bg-mystery-800 p-2 rounded border border-mystery-700 mb-4 max-w-sm text-center">
+                    请检查 API Key 额度或网络连接
+                </div>
+                <button onClick={() => { setPhase(GamePhase.IDLE); setHasApiKey(false); localStorage.removeItem("gemini_api_key"); }} className="underline hover:text-white">重新输入 API Key</button>
             </div>
         ) : (
             /* GAME PLAY AREA */
