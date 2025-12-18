@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { MysteryData, JudgeResponse, AnswerType, EndingEvaluation } from "../types";
 
-const MODEL_NAME = 'gemini-2.5-flash';
-const IMAGE_MODEL_NAME = 'imagen-4.0-generate-001';
+const MODEL_NAME = 'gemini-1.5-flash';
+const IMAGE_MODEL_NAME = 'imagen-3.0-generate-001';
 
 /**
  * Helper to get the API Key.
@@ -23,7 +23,7 @@ const generateImage = async (prompt: string): Promise<string | undefined> => {
     if (!apiKey) return undefined;
 
     const ai = new GoogleGenAI({ apiKey });
-    
+
     const response = await ai.models.generateImages({
       model: IMAGE_MODEL_NAME,
       prompt: `A dark, atmospheric, moody portrait of a character for a mystery detective game. ${prompt} High quality, digital art style.`,
@@ -33,7 +33,7 @@ const generateImage = async (prompt: string): Promise<string | undefined> => {
         aspectRatio: '1:1',
       },
     });
-    
+
     const base64String = response.generatedImages?.[0]?.image?.imageBytes;
     if (base64String) {
       return `data:image/jpeg;base64,${base64String}`;
@@ -129,17 +129,17 @@ export const generateMystery = async (): Promise<MysteryData> => {
 
     const text = response.text;
     if (!text) throw new Error("No text returned from Gemini");
-    
+
     const data = JSON.parse(text) as MysteryData;
-    
+
     // Ensure all clues start locked
     data.clues = data.clues.map(c => ({ ...c, isLocked: true }));
 
     // Generate Images for NPCs
     await Promise.all(data.npcs.map(async (npc) => {
-        if (npc.visualSummary) {
-            npc.avatarUrl = await generateImage(npc.visualSummary);
-        }
+      if (npc.visualSummary) {
+        npc.avatarUrl = await generateImage(npc.visualSummary);
+      }
     }));
 
     return data;
@@ -160,19 +160,19 @@ export const judgeInput = async (
   targetId: string, // 'GM' or NPC ID
   history: string[]
 ): Promise<JudgeResponse> => {
-  
+
   const isGM = targetId === 'GM';
   const targetNPC = mystery.npcs.find(n => n.id === targetId);
 
   const schema: Schema = {
     type: Type.OBJECT,
     properties: {
-      answerType: { 
-        type: Type.STRING, 
+      answerType: {
+        type: Type.STRING,
         enum: [
-            AnswerType.YES, AnswerType.NO, AnswerType.IRRELEVANT, 
-            AnswerType.HINT, AnswerType.CLARIFICATION, AnswerType.NPC_DIALOGUE
-        ] 
+          AnswerType.YES, AnswerType.NO, AnswerType.IRRELEVANT,
+          AnswerType.HINT, AnswerType.CLARIFICATION, AnswerType.NPC_DIALOGUE
+        ]
       },
       reply: { type: Type.STRING, description: "The response text in Chinese." },
       unlockedClueId: { type: Type.STRING, description: "The ID of a clue found, or null." },
@@ -216,7 +216,7 @@ export const judgeInput = async (
 
     const text = response.text;
     if (!text) throw new Error("No judge response");
-    
+
     return JSON.parse(text) as JudgeResponse;
   } catch (error) {
     console.error("Judgment error:", error);
@@ -266,8 +266,8 @@ export const evaluateSolution = async (
   `;
 
   try {
-     const ai = new GoogleGenAI({ apiKey: getApiKey() });
-     const response = await ai.models.generateContent({
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+    const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
       config: {
@@ -279,9 +279,9 @@ export const evaluateSolution = async (
     return JSON.parse(response.text!) as EndingEvaluation;
   } catch (e) {
     return {
-        type: 'BAD',
-        title: '混沌',
-        narrative: '你的思绪太混乱了，无法得出结论。'
+      type: 'BAD',
+      title: '混沌',
+      narrative: '你的思绪太混乱了，无法得出结论。'
     };
   }
 };
