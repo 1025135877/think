@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,38 +9,99 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background-color: #0f172a; /* 兜底背景色 */
+    background-color: #020617;
+    cursor: default;
   }
 }
 
-/* 兼容 Tailwind 的自定义滚动条 */
+.font-serif {
+  font-family: 'Cinzel', 'Noto Serif SC', serif;
+}
+
+.font-sans {
+  font-family: 'Inter', sans-serif;
+}
+
+/* 高级扫描线效果 */
+.scanlines {
+  position: relative;
+  overflow: hidden;
+}
+.scanlines::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(0, 0, 0, 0.3) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 霓虹发光文字 */
+.neon-text {
+  text-shadow: 0 0 8px rgba(139, 92, 246, 0.6), 0 0 16px rgba(139, 92, 246, 0.4);
+}
+
+/* 进场动画 */
+@keyframes letter-spread {
+  from { letter-spacing: -0.5em; opacity: 0; filter: blur(10px); }
+  to { letter-spacing: 0.25em; opacity: 1; filter: blur(0); }
+}
+.animate-spread {
+  animation: letter-spread 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slide-up-fade {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+  animation: slide-up-fade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 打字机光标 */
+.typing-cursor::after {
+  content: '_';
+  animation: blink 0.8s infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* 氛围光影 */
+.ambient-light {
+  background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 70%);
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(2, 6, 23, 0.5);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(139, 92, 246, 0.2);
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(139, 92, 246, 0.4);
 }
 
-/* 渐变文本 */
-.text-gradient {
-  background: linear-gradient(to right, #8b5cf6, #6366f1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+/* 按钮脉冲 */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.1); opacity: 0; }
 }
-
-/* 动画增强 */
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+.pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  border-radius: inherit;
+  animation: pulse-ring 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
 }
