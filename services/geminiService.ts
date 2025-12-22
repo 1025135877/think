@@ -175,22 +175,24 @@ export const judgeInput = async (
         description: "One of YES, NO, IRRELEVANT, HINT, CLARIFICATION, NPC_DIALOGUE"
       },
       reply: { type: Type.STRING },
-      unlockedClueId: { type: Type.STRING, nullable: true },
+      unlockedClueId: { type: Type.STRING, description: "Optional ID of a clue if it is revealed in this turn." },
     },
     required: ["answerType", "reply"],
   };
 
   const prompt = `
     Mystery: "${mystery.title}"
-    Solution: ${mystery.solution}
-    Clues: ${JSON.stringify(mystery.clues.map(c => ({ id: c.id, desc: c.description })))}
+    True Solution: ${mystery.solution}
+    Clues List: ${JSON.stringify(mystery.clues.map(c => ({ id: c.id, desc: c.description })))}
+    Previous Interaction History: ${JSON.stringify(history)}
     User Input: "${userInput}"
-    Target: ${isGM ? 'Game Master' : `NPC: ${targetNPC?.name}`}
-    ${!isGM ? `Personality: ${targetNPC?.personality}` : ''}
+    Current Interaction Target: ${isGM ? 'Game Master (provides objective Yes/No/Irrelevant facts)' : `NPC: ${targetNPC?.name} (Roleplays based on their personality)`}
+    ${!isGM ? `NPC Personality/Role: ${targetNPC?.personality}` : ''}
     
-    If GM: Answer Yes/No/Irrelevant/Hint.
-    If NPC: Roleplay response. 
-    Unlock clue ID if specifically revealed.
+    Task: 
+    1. If target is GM: provide answerType (YES/NO/IRRELEVANT/HINT) and a short reply.
+    2. If target is an NPC: roleplay as them (NPC_DIALOGUE).
+    3. If the user's input leads to discovering one of the 'Clues List', return the 'unlockedClueId'.
   `;
 
   try {
@@ -235,9 +237,10 @@ export const evaluateSolution = async (
 
   const prompt = `
     Real Solution: ${mystery.solution}
-    Endings: ${JSON.stringify(mystery.endings)}
-    Player's Theory: "${playerTheory}"
-    Evaluate and select ending type + narrative conclusion.
+    Defined Endings: ${JSON.stringify(mystery.endings)}
+    Player's Final Theory: "${playerTheory}"
+    
+    Critically evaluate if the player's theory matches the solution. Select the best ending and write a narrative wrap-up.
   `;
 
   try {

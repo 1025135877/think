@@ -7,14 +7,12 @@ import { InputArea } from './components/InputArea';
 import { GamePhase, MysteryData, ChatMessage, AnswerType, EndingEvaluation } from './types';
 
 declare global {
-  // Define AIStudio interface globally to match the environment and avoid conflicts
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Fixed: Removed readonly modifier to avoid "identical modifiers" error with standard window interface merging
-    aistudio: AIStudio;
+    aistudio?: AIStudio;
   }
 }
 
@@ -27,6 +25,7 @@ function App() {
   const [activeTarget, setActiveTarget] = useState<string>('GM');
   const [unlockedClues, setUnlockedClues] = useState<Set<string>>(new Set());
   const [showCluePanel, setShowCluePanel] = useState(false);
+  const [isMysteryExpanded, setIsMysteryExpanded] = useState(false);
   const [finalTheory, setFinalTheory] = useState('');
   const [endingResult, setEndingResult] = useState<EndingEvaluation | null>(null);
 
@@ -45,7 +44,6 @@ function App() {
   const handleSelectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
-      // Assume success after opening dialog to mitigate race conditions
       setHasApiKey(true);
     }
   };
@@ -73,10 +71,9 @@ function App() {
       setPhase(GamePhase.PLAYING);
     } catch (error: any) {
       console.error("Game creation failed:", error);
-      // Handle required key re-selection if the key is invalid or lacks permissions
       if (error.message === "KEY_RESELECT_REQUIRED") {
         setHasApiKey(false);
-        alert("API 密钥权限不足或无效。请确保使用已启用 Gemini API 的 API 密钥（建议使用付费项目密钥以访问高级模型）。");
+        alert("API 密钥权限不足或无效。请确保使用已启用 Gemini API 的 API 密钥。");
       }
       setPhase(GamePhase.FAILED);
     } finally {
@@ -130,7 +127,6 @@ function App() {
       }]);
     } catch (error: any) {
       console.error("Interaction failed:", error);
-      // Handle required key re-selection
       if (error.message === "KEY_RESELECT_REQUIRED") {
         setHasApiKey(false);
         alert("API 密钥权限不足或无效，请重新选择。");
@@ -149,7 +145,6 @@ function App() {
         setPhase(GamePhase.ENDED);
     } catch (e: any) {
         console.error(e);
-        // Handle required key re-selection
         if (e.message === "KEY_RESELECT_REQUIRED") {
             setHasApiKey(false);
             alert("API 密钥权限不足或无效，请重新选择。");
@@ -161,33 +156,28 @@ function App() {
 
   if (!hasApiKey) {
     return (
-      <div className="flex h-screen w-full bg-mystery-900 items-center justify-center p-4">
-        <div className="bg-mystery-800 p-8 rounded-2xl border border-mystery-700 shadow-2xl max-w-md w-full text-center space-y-8">
-          <div className="w-20 h-20 bg-mystery-700/50 rounded-full flex items-center justify-center mx-auto border border-mystery-600">
+      <div className="flex h-screen w-full bg-[#0f172a] bg-mystery-900 items-center justify-center p-4">
+        <div className="bg-slate-800/90 bg-mystery-800 p-8 rounded-2xl border border-slate-700 border-mystery-700 shadow-2xl max-w-md w-full text-center space-y-8 animate-fade-in backdrop-blur-md">
+          <div className="w-20 h-20 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto border border-slate-600">
             <span className="text-4xl">🕵️</span>
           </div>
           <div className="space-y-2">
             <h1 className="text-3xl font-serif font-bold text-slate-100">Enigma AI</h1>
-            <p className="text-mystery-accent text-sm font-bold tracking-widest uppercase">沉浸式推理剧场</p>
+            <p className="text-violet-400 text-mystery-accent text-sm font-bold tracking-widest uppercase">沉浸式推理剧场</p>
           </div>
           <div className="space-y-4">
             <p className="text-slate-400 text-sm leading-relaxed">
-              欢迎。要开启这场迷局，请先连接您的 Google AI Studio 密钥。由于本作涉及图像生成，建议使用付费项目的密钥。
+              欢迎进入迷局。请先连接您的 Google AI Studio 密钥以开启一段独特的推理旅程。
             </p>
             <button 
                 onClick={handleSelectKey}
-                className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
+                className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]"
             >
                 🔑 连接 Google AI Studio
             </button>
             <p className="text-[10px] text-slate-500 italic">
-                注意：本项目使用 Gemini 2.5 Flash Image 模型进行人物刻画。
+                建议使用已启用计费的项目密钥以获得最佳体验。
             </p>
-          </div>
-          <div className="text-[10px] text-slate-600 border-t border-mystery-700 pt-4">
-             <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="underline hover:text-slate-400">
-                了解关于计费和 API 密钥的更多信息
-             </a>
           </div>
         </div>
       </div>
@@ -195,73 +185,86 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-mystery-900 font-sans overflow-hidden text-slate-200">
+    <div className="flex h-screen w-full bg-[#0f172a] bg-mystery-900 font-sans overflow-hidden text-slate-200">
       
+      {/* 渐变遮罩增强氛围感 */}
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,_rgba(139,92,246,0.03)_0%,_rgba(15,23,42,0)_100%)] z-0" />
+
+      {/* Mobile Overlay */}
+      {showCluePanel && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 md:hidden animate-fade-in"
+          onClick={() => setShowCluePanel(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <div className={`
-        fixed md:relative z-30 w-80 h-full bg-mystery-800 border-r border-mystery-700 transform transition-transform duration-300 flex flex-col
+        fixed md:relative z-30 w-72 h-full bg-[#1e293b] bg-mystery-800 border-r border-slate-700/50 border-mystery-700 transform transition-transform duration-300 flex flex-col shadow-2xl
         ${showCluePanel ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
-        <div className="p-4 border-b border-mystery-700 bg-mystery-900/50 flex justify-between items-center">
-            <h2 className="font-serif font-bold text-mystery-accent text-xl">调查手册</h2>
-            <button onClick={() => setShowCluePanel(false)} className="md:hidden text-slate-400">✕</button>
+        <div className="p-4 border-b border-slate-700/50 bg-[#0f172a]/50 flex justify-between items-center shrink-0">
+            <h2 className="font-serif font-bold text-violet-400 text-lg">调查手册</h2>
+            <button onClick={() => setShowCluePanel(false)} className="md:hidden text-slate-400 p-2 hover:bg-slate-700 rounded-lg">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
         </div>
 
-        <div className="p-4 space-y-3 overflow-y-auto flex-1 scrollbar-hide">
+        <div className="p-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar z-10">
             {phase === GamePhase.PLAYING && mystery && (
                 <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">选择询问对象</p>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-2">询问对象</p>
                     <button 
-                        onClick={() => setActiveTarget('GM')}
-                        className={`w-full text-left p-3 rounded-lg border transition-all flex items-center gap-3
-                        ${activeTarget === 'GM' ? 'bg-mystery-accent/20 border-mystery-accent text-white' : 'bg-mystery-900 border-mystery-700 text-slate-400 hover:bg-mystery-700'}`}
+                        onClick={() => { setActiveTarget('GM'); setShowCluePanel(false); }}
+                        className={`w-full text-left p-3 rounded-xl border transition-all flex items-center gap-3
+                        ${activeTarget === 'GM' ? 'bg-violet-500/20 border-violet-500 text-white' : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
                     >
                         <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs">👻</div>
                         <div>
-                            <div className="font-bold text-sm">上帝视角</div>
-                            <div className="text-[10px] opacity-70">是/否 提问模式</div>
+                            <div className="font-bold text-xs">上帝视角</div>
+                            <div className="text-[10px] opacity-70">Yes/No/无关</div>
                         </div>
                     </button>
 
                     {mystery.npcs.map(npc => (
                         <button 
                             key={npc.id}
-                            onClick={() => setActiveTarget(npc.id)}
-                            className={`w-full text-left p-3 rounded-lg border transition-all flex items-center gap-3 relative overflow-hidden
-                            ${activeTarget === npc.id ? 'bg-mystery-accent/20 border-mystery-accent text-white' : 'bg-mystery-900 border-mystery-700 text-slate-400 hover:bg-mystery-700'}`}
+                            onClick={() => { setActiveTarget(npc.id); setShowCluePanel(false); }}
+                            className={`w-full text-left p-2 rounded-xl border transition-all flex items-center gap-3 relative overflow-hidden
+                            ${activeTarget === npc.id ? 'bg-violet-500/20 border-violet-500 text-white' : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
                         >
-                             <div className="w-10 h-10 rounded-full bg-indigo-900 flex-shrink-0 flex items-center justify-center overflow-hidden border border-mystery-600 z-10 shadow-md">
+                             <div className="w-10 h-10 rounded-full bg-indigo-900 flex-shrink-0 flex items-center justify-center overflow-hidden border border-slate-600 z-10 shadow-md">
                                 {npc.avatarUrl ? (
                                     <img src={npc.avatarUrl} alt={npc.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <span className="text-xs font-bold">{npc.name.charAt(0)}</span>
                                 )}
                              </div>
-                             <div className="z-10">
-                                <div className="font-bold text-sm">{npc.name}</div>
-                                <div className="text-[10px] opacity-90 font-serif italic">{npc.role}</div>
+                             <div className="z-10 min-w-0">
+                                <div className="font-bold text-xs truncate">{npc.name}</div>
+                                <div className="text-[10px] opacity-90 font-serif italic truncate">{npc.role}</div>
                             </div>
                         </button>
                     ))}
                 </div>
             )}
 
-            <div className="mt-8">
-                <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-3">已锁定的事实</p>
+            <div className="mt-6">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-3">关键线索</p>
                 {unlockedClues.size === 0 ? (
-                    <div className="text-center p-6 border border-dashed border-mystery-700 rounded-xl text-slate-600 text-xs italic">
-                        通过巧妙的提问揭开真相...
+                    <div className="text-center p-6 border border-dashed border-slate-700 rounded-xl text-slate-600 text-[10px] italic">
+                        随着调查深入，线索将在此显现...
                     </div>
                 ) : (
                     <div className="space-y-2">
                         {mystery?.clues.map(clue => {
                             if (!unlockedClues.has(clue.id)) return null;
                             return (
-                                <div key={clue.id} className="bg-emerald-950/30 border border-emerald-900/50 p-3 rounded-lg text-sm animate-fade-in">
+                                <div key={clue.id} className="bg-emerald-950/20 border border-emerald-900/30 p-3 rounded-xl text-[11px] animate-fade-in backdrop-blur-sm">
                                     <div className="text-emerald-400 font-bold mb-1 flex items-center gap-2">
-                                        <span className="text-[10px]">✔</span> {clue.title}
+                                        <div className="w-1 h-1 rounded-full bg-emerald-500" /> {clue.title}
                                     </div>
-                                    <div className="text-emerald-100/60 text-[11px] leading-relaxed">{clue.description}</div>
+                                    <div className="text-slate-400 leading-relaxed italic">{clue.description}</div>
                                 </div>
                             )
                         })}
@@ -271,107 +274,115 @@ function App() {
         </div>
 
         {phase === GamePhase.PLAYING && (
-            <div className="p-4 border-t border-mystery-700 bg-mystery-900/50">
+            <div className="p-4 border-t border-slate-700/50 bg-[#0f172a]/50 shrink-0">
                 <button 
-                    onClick={() => setPhase(GamePhase.SOLVING)}
-                    className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:brightness-110 transition-all uppercase tracking-wider text-xs"
+                    onClick={() => { setPhase(GamePhase.SOLVING); setShowCluePanel(false); }}
+                    className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-700 text-white font-bold rounded-xl shadow-lg hover:brightness-110 transition-all uppercase tracking-widest text-[10px]"
                 >
-                    终结调查 / 提交推理
+                    终结调查
                 </button>
             </div>
         )}
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative h-full">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
         {/* Mobile Navbar */}
-        <div className="md:hidden h-14 bg-mystery-800 border-b border-mystery-700 flex items-center px-4 justify-between shrink-0">
-             <span className="font-serif font-bold text-slate-100">Enigma AI</span>
-             <button onClick={() => setShowCluePanel(true)} className="text-mystery-accent text-sm font-bold flex items-center gap-1">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                线索
+        <div className="md:hidden h-14 bg-[#1e293b] border-b border-slate-700/50 flex items-center px-4 justify-between shrink-0 z-20 shadow-xl">
+             <span className="font-serif font-bold text-slate-100 tracking-tight">Enigma AI</span>
+             <button onClick={() => setShowCluePanel(true)} className="text-violet-400 text-xs font-bold flex items-center gap-1.5 bg-slate-700/50 px-3 py-1.5 rounded-full border border-slate-600">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                手册
              </button>
         </div>
 
         {phase === GamePhase.LOADING ? (
              <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-6 p-8">
-                <div className="relative w-20 h-20">
-                    <div className="absolute inset-0 border-4 border-mystery-700 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-mystery-accent rounded-full border-t-transparent animate-spin"></div>
+                <div className="relative w-16 h-16">
+                    <div className="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
+                    <div className="absolute inset-0 border-4 border-violet-500 rounded-full border-t-transparent animate-spin"></div>
                 </div>
                 <div className="text-center space-y-2">
-                    <p className="animate-pulse tracking-[0.2em] uppercase text-xs font-bold text-mystery-accent">正在构建迷局...</p>
-                    <p className="text-xs text-slate-500 max-w-xs leading-relaxed">Gemini 正在细致刻画每一个嫌疑人的面容与动机，请耐心等待这份独特的黑暗馈赠。</p>
+                    <p className="animate-pulse tracking-[0.3em] uppercase text-[10px] font-bold text-violet-400">正在编织谜团...</p>
+                    <p className="text-[10px] text-slate-500 max-w-[240px] leading-relaxed italic">Gemini 正在细致刻画每一个嫌疑人的面容与动机...</p>
                 </div>
              </div>
         ) : phase === GamePhase.SOLVING ? (
-            <div className="flex-1 p-6 md:p-12 flex flex-col items-center justify-center bg-mystery-900 animate-fade-in">
-                <div className="max-w-xl w-full space-y-8">
-                    <div className="text-center space-y-2">
+            <div className="flex-1 p-6 md:p-12 flex flex-col items-center justify-center animate-fade-in overflow-y-auto">
+                <div className="max-w-xl w-full space-y-8 py-8">
+                    <div className="text-center space-y-3">
                         <h2 className="text-3xl font-serif text-slate-100">审判时刻</h2>
-                        <p className="text-slate-400 text-sm">将碎片拼凑成真相。一旦落笔，结局将定。</p>
+                        <p className="text-slate-400 text-sm italic">请拼凑你掌握的所有线索。一旦提交，真相将定格。</p>
                     </div>
                     <textarea 
                         value={finalTheory}
                         onChange={(e) => setFinalTheory(e.target.value)}
-                        className="w-full h-64 bg-mystery-800 border border-mystery-700 rounded-2xl p-6 text-slate-200 focus:outline-none focus:ring-2 focus:ring-mystery-accent transition-all resize-none shadow-inner"
-                        placeholder="在此处写下你对案件真相的完整推理..."
+                        className="w-full h-64 bg-slate-800/50 border border-slate-700 rounded-2xl p-6 text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all resize-none shadow-inner text-sm leading-relaxed backdrop-blur-sm"
+                        placeholder="在此处写下你对真相的完整推理..."
                     />
                     <div className="flex gap-4">
                         <button 
                             onClick={() => setPhase(GamePhase.PLAYING)}
-                            className="flex-1 py-4 text-slate-500 hover:text-slate-300 font-bold transition-colors"
+                            className="flex-1 py-4 text-slate-500 hover:text-slate-300 font-bold transition-colors text-sm"
                         >
-                            继续搜证
+                            返回搜证
                         </button>
                         <button 
                             onClick={handleSolveAttempt}
                             disabled={!finalTheory.trim() || isProcessing}
-                            className="flex-1 py-4 bg-mystery-accent hover:bg-violet-500 text-white font-bold rounded-xl shadow-xl disabled:opacity-50 transition-all"
+                            className="flex-1 py-4 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-xl shadow-xl disabled:opacity-50 transition-all text-sm"
                         >
-                            {isProcessing ? '法官思考中...' : '提交真相'}
+                            {isProcessing ? '正在判定...' : '提交真相'}
                         </button>
                     </div>
                 </div>
             </div>
         ) : phase === GamePhase.ENDED && endingResult ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in overflow-y-auto bg-gradient-to-b from-mystery-900 to-black">
-                 <div className={`text-xs font-bold tracking-[0.3em] uppercase mb-4
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in overflow-y-auto bg-gradient-to-b from-slate-900 via-slate-900 to-black">
+                 <div className={`text-[10px] font-bold tracking-[0.4em] uppercase mb-4
                     ${endingResult.type === 'GOOD' ? 'text-emerald-400' : endingResult.type === 'NEUTRAL' ? 'text-amber-400' : 'text-rose-500'}
                  `}>
-                    达成结局: {endingResult.type === 'GOOD' ? '完美破案' : endingResult.type === 'NEUTRAL' ? '真相迷雾' : '迷失真相'}
+                    结局: {endingResult.type === 'GOOD' ? '完美破案' : endingResult.type === 'NEUTRAL' ? '真相迷雾' : '迷失真相'}
                  </div>
-                 <h1 className="text-4xl md:text-6xl font-serif font-bold text-slate-100 mb-8 px-4">{endingResult.title}</h1>
-                 <p className="max-w-2xl text-lg text-slate-300 leading-relaxed mb-12 italic px-4">
+                 <h1 className="text-4xl md:text-6xl font-serif font-bold text-slate-100 mb-8 px-4 leading-tight">{endingResult.title}</h1>
+                 <p className="max-w-2xl text-base md:text-lg text-slate-300 leading-relaxed mb-12 italic px-4">
                     {endingResult.narrative}
                  </p>
                  
-                 <div className="bg-white/5 backdrop-blur-md p-8 rounded-3xl max-w-2xl w-full border border-white/10 text-left mb-12 shadow-2xl">
-                    <h3 className="text-mystery-accent font-bold text-xs uppercase tracking-widest mb-4">世界真相 (The Truth)</h3>
-                    <p className="text-slate-400 text-sm whitespace-pre-wrap leading-loose font-serif">{mystery?.solution}</p>
+                 <div className="bg-slate-800/40 backdrop-blur-md p-8 rounded-3xl max-w-2xl w-full border border-slate-700 text-left mb-12 shadow-2xl overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 text-4xl">🔎</div>
+                    <h3 className="text-violet-400 font-bold text-[10px] uppercase tracking-widest mb-4 border-b border-violet-400/30 pb-2">世界真相</h3>
+                    <p className="text-slate-400 text-sm whitespace-pre-wrap leading-loose font-serif italic">{mystery?.solution}</p>
                  </div>
 
                  <button
                     onClick={startNewGame}
-                    className="bg-slate-100 text-mystery-900 hover:bg-white font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 active:scale-95 shadow-xl"
+                    className="bg-slate-100 text-slate-900 hover:bg-white font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 active:scale-95 shadow-xl shrink-0 mb-8"
                  >
-                    再来一局
+                    开启新局
                  </button>
             </div>
         ) : phase === GamePhase.FAILED ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
-                <p className="text-rose-500 font-bold">连接至迷雾深处失败</p>
-                <div className="text-[10px] bg-mystery-800 p-4 rounded-xl border border-mystery-700 mb-4 max-w-xs text-center leading-relaxed">
-                    这可能是由于 API 额度耗尽、网络不稳或密钥权限受限。
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4 p-8 text-center">
+                <div className="text-rose-500 text-4xl mb-2">⚠️</div>
+                <p className="text-rose-500 font-bold text-lg">无法连接至迷局</p>
+                <div className="text-[10px] bg-slate-800/50 p-4 rounded-xl border border-slate-700 max-w-xs text-center leading-relaxed text-slate-500">
+                    这可能是由于网络不稳定或 API 密钥限制导致。
                 </div>
-                <button onClick={() => setPhase(GamePhase.IDLE)} className="underline hover:text-white text-sm">点击重试</button>
+                <button onClick={() => setPhase(GamePhase.IDLE)} className="bg-slate-700 px-8 py-2.5 rounded-full text-white hover:bg-slate-600 transition-colors text-sm mt-4 shadow-lg">重试</button>
             </div>
         ) : (
-            <>
-                {mystery && <MysteryCard mystery={mystery} isExpanded={false} onToggle={() => {}} />}
+            <div className="flex-1 flex flex-col min-h-0 bg-[#0f172a]">
+                {mystery && (
+                  <MysteryCard 
+                    mystery={mystery} 
+                    isExpanded={isMysteryExpanded} 
+                    onToggle={() => setIsMysteryExpanded(!isMysteryExpanded)} 
+                  />
+                )}
                 <ChatInterface messages={messages} isLoading={isProcessing} />
                 <InputArea onSend={handlePlayerInput} onNewGame={startNewGame} phase={phase} />
-            </>
+            </div>
         )}
       </div>
     </div>

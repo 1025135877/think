@@ -1,11 +1,22 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Enigma AI</title>
+    <title>Enigma AI - 沉浸式推理剧场</title>
+    <link rel="stylesheet" href="./index.css">
     <style>
-      /* Custom Scrollbar for dark theme */
+      /* 关键样式预加载，防止闪白 */
+      body {
+        background-color: #0f172a;
+        margin: 0;
+        color: #e2e8f0;
+      }
+      #root {
+        height: 100dvh;
+      }
+      /* 滚动条美化 */
       ::-webkit-scrollbar {
         width: 8px;
       }
@@ -20,19 +31,19 @@
         background: #475569;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.0"
-  }
-}
-</script>
-</head>
+    <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+        "vite": "https://esm.sh/vite@^7.3.0"
+      }
+    }
+    </script>
+  </head>
   <body class="bg-mystery-900 text-slate-200 antialiased h-screen overflow-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
