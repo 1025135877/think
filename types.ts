@@ -16,6 +16,7 @@ export interface NPC {
   personality: string; // Instructions for AI roleplay
   avatarUrl?: string;
   visualSummary?: string;
+  status?: 'alive' | 'deceased';
 }
 
 export interface Clue {
@@ -49,7 +50,7 @@ export enum AnswerType {
   NO = 'NO',
   IRRELEVANT = 'IRRELEVANT',
   HINT = 'HINT',
-  CORRECT = 'CORRECT', 
+  CORRECT = 'CORRECT',
   CLARIFICATION = 'CLARIFICATION',
   NPC_DIALOGUE = 'NPC_DIALOGUE' // New type for NPC responses
 }

@@ -1,265 +1,173 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { MysteryData, JudgeResponse, AnswerType, EndingEvaluation } from "../types";
 
-// Complex Text Tasks (e.g., advanced reasoning) should use 'gemini-3-pro-preview' as per guidelines.
-const TEXT_MODEL = 'gemini-3-pro-preview';
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
+// 2025 Models: Using gemini-2.5-flash as requested.
+const MODEL_FALLBACKS = [
+  'gemini-2.5-flash',
+  'gemini-3-flash-latest',
+  'gemini-2.0-flash',
+  'gemini-pro'
+];
+
+let runtimeApiKey = "";
+export const setApiKey = (key: string) => { runtimeApiKey = key; };
+const getApiKey = () => runtimeApiKey || process.env.GEMINI_API_KEY || process.env.API_KEY || "";
 
 /**
- * Checks if an error is related to API key permissions or validity.
+ * Generic API Wrapper with automatic model fallback for 404/Not Found/Quota issues.
  */
+async function callGemini(prompt: string, temperature = 0.5) {
+  const apiKey = getApiKey();
+  // Using explicit apiKey in config object as it's the safest for browser environments
+  const ai = new GoogleGenAI({ apiKey });
+
+  let lastError = null;
+  for (const modelName of MODEL_FALLBACKS) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: { temperature }
+      });
+      const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    } catch (e: any) {
+      lastError = e;
+      const msg = e.message?.toLowerCase() || "";
+      if (msg.includes("not found") || msg.includes("not supported") || msg.includes("quota") || msg.includes("exhausted") || msg.includes("429")) {
+        console.warn(`Model ${modelName} unavailable or rate limited, trying next...`);
+        continue;
+      }
+      if (isKeyError(e)) throw new Error("KEY_RESELECT_REQUIRED");
+      throw e;
+    }
+  }
+  throw lastError || new Error("All models failed.");
+}
+
 const isKeyError = (error: any): boolean => {
   const msg = error?.message?.toLowerCase() || "";
-  return (
-    msg.includes("permission") ||
-    msg.includes("403") ||
-    msg.includes("not found") ||
-    msg.includes("not authorized") ||
-    msg.includes("401") ||
-    msg.includes("requested entity was not found")
-  );
+  return msg.includes("permission") || msg.includes("403") || msg.includes("401") || msg.includes("key");
 };
 
+const cleanJson = (text: string) => text.replace(/```json|```/g, '').trim();
+
 /**
- * Generates a single image using gemini-2.5-flash-image based on a prompt.
+ * Generates all NPC portraits in a single batch call using gemini-2.5-flash-image.
+ * Limits image size/resolution for speed.
  */
-const generateImage = async (prompt: string): Promise<string | undefined> => {
-  try {
-    // Create instance right before call for most up-to-date API key
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const response = await ai.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: {
-        parts: [{ text: `A dark, atmospheric, moody portrait of a character for a mystery detective game. ${prompt} Digital art style, professional lighting.` }]
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "1:1"
-          // Note: imageSize is NOT supported for gemini-2.5-flash-image
-        }
-      },
-    });
-    
-    // Find image part as recommended by guidelines
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-    return undefined;
-  } catch (error: any) {
-    if (isKeyError(error)) {
-      throw new Error("KEY_RESELECT_REQUIRED");
-    }
-    console.error("Image generation failed:", error);
-    return undefined;
+/**
+ * Generates all NPC portraits instantly using the Dicebear API.
+ * This is zero-quota (avoids 429) and high performance.
+ */
+const generateBatchPortraits = (npcs: any[]): void => {
+  for (const npc of npcs) {
+    // We use the character name or ID as seed for consistency
+    const seed = npc.name || npc.id || Math.random().toString();
+    // Styling: avataaars style with a dark background to match the game aesthetic
+    // backgroundColor: '020617' matches the site's background
+    npc.avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=020617,1e1b4b&mood=serious,neutral`;
   }
 };
 
-/**
- * Generates a new Detective Mystery with NPCs, Clues, and Endings in Chinese.
- */
+const validateMysteryData = (data: any): MysteryData => {
+  return {
+    title: data.title || "未知案件",
+    situation: data.situation || "案件背景正在模糊...",
+    solution: data.solution || "真相尚未明朗。",
+    difficulty: data.difficulty || "普通",
+    npcs: Array.isArray(data.npcs) ? data.npcs.map((n: any) => ({
+      id: String(n.id || Math.random()),
+      name: n.name || "无名氏",
+      role: n.role || "目击者",
+      description: n.description || "",
+      personality: n.personality || "谨慎冷静",
+      status: n.status || 'alive',
+      visualSummary: n.visualSummary || n.description || ""
+    })) : [],
+    clues: Array.isArray(data.clues) ? data.clues.map((c: any) => ({
+      id: String(c.id || Math.random()),
+      title: c.title || "新内容",
+      description: c.description || "一条模糊的线索",
+      isLocked: true
+    })) : [],
+    endings: Array.isArray(data.endings) ? data.endings.map((e: any) => ({
+      type: e.type || "BAD",
+      title: e.title || "结束",
+      description: e.description || e.narrative || "",
+      condition: e.condition || ""
+    })) : []
+  } as MysteryData;
+};
+
 export const generateMystery = async (): Promise<MysteryData> => {
-  const schema = {
-    type: Type.OBJECT,
-    properties: {
-      title: { type: Type.STRING },
-      situation: { type: Type.STRING, description: "The initial known scenario (Chinese)." },
-      solution: { type: Type.STRING, description: "The complete hidden truth (Chinese)." },
-      difficulty: { type: Type.STRING },
-      npcs: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            name: { type: Type.STRING },
-            role: { type: Type.STRING },
-            description: { type: Type.STRING },
-            personality: { type: Type.STRING, description: "How this NPC speaks and acts." },
-            visualSummary: { type: Type.STRING, description: "A detailed visual description of the character's face and clothing in English." }
-          }
-        }
-      },
-      clues: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            title: { type: Type.STRING },
-            description: { type: Type.STRING },
-            isLocked: { type: Type.BOOLEAN }
-          }
-        }
-      },
-      endings: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            type: { type: Type.STRING, description: "One of 'BAD', 'NEUTRAL', 'GOOD'" },
-            title: { type: Type.STRING },
-            description: { type: Type.STRING },
-            condition: { type: Type.STRING }
-          }
-        }
-      }
-    },
-    required: ["title", "situation", "solution", "difficulty", "npcs", "clues", "endings"],
-  };
-
-  const prompt = `
-    Generate a 'Lateral Thinking' style detective mystery game in Simplified Chinese.
-    
-    1. **Situation**: A mysterious, dark, or suspenseful scenario.
-    2. **NPCs**: Create exactly 3 NPCs involved in the case. 
-       - One might be lying.
-       - Provide a 'visualSummary' in English for each.
-    3. **Clues**: Create 4-5 specific facts that players find by asking questions.
-    4. **Endings**: BAD (wrong accusation), NEUTRAL (partial truth), GOOD (complete truth).
-       
-    Output JSON. All Chinese except 'visualSummary'.
-  `;
+  const prompt = `Generate a 'Lateral Thinking' detective mystery in Simplified Chinese.
+    Return ONLY a JSON object with this exact structure:
+    {
+      "title": "Case Name",
+      "situation": "Case Background (Chinese)",
+      "solution": "The Full Truth (Chinese)",
+      "difficulty": "Easy/Medium/Hard",
+      "npcs": [
+        {"id": "n1", "name": "Victim Name", "role": "Victim", "description": "...", "personality": "...", "visualSummary": "...", "status": "deceased"},
+        {"id": "n2", "name": "Witness A", "role": "Suspect/Witness", "description": "...", "personality": "...", "visualSummary": "...", "status": "alive"},
+        {"id": "n3", "name": "Witness B", "role": "Suspect/Witness", "description": "...", "personality": "...", "visualSummary": "...", "status": "alive"}
+      ],
+      "clues": [
+        {"id": "c1", "title": "Clue Title", "description": "Specific Fact"}
+      ],
+      "endings": [
+        {"type": "GOOD/NEUTRAL/BAD", "title": "Ending Title", "description": "Narrative"}
+      ]
+    }
+    CRITICAL: You MUST generate exactly 1 'deceased' NPC (the victim) and at least 2 'alive' NPCs (witnesses/suspects) to interrogate. 
+    All content must be in Simplified Chinese except 'visualSummary'. Do not include any commentary outside the JSON.`;
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: 0.9,
-      },
-    });
+    const text = await callGemini(prompt, 0.9);
+    const rawData = JSON.parse(cleanJson(text));
+    const data = validateMysteryData(rawData);
 
-    // Use .text property as recommended by guidelines
-    const data = JSON.parse(response.text.trim()) as MysteryData;
-    data.clues = data.clues.map(c => ({ ...c, isLocked: true }));
+    // Single batch call for all portraits as requested
+    await generateBatchPortraits(data.npcs);
 
-    // Portraits generation
-    const portraitPromises = data.npcs.map(async (npc) => {
-      if (npc.visualSummary) {
-        npc.avatarUrl = await generateImage(npc.visualSummary);
-      }
-    });
-    
-    await Promise.all(portraitPromises);
     return data;
-  } catch (error: any) {
-    if (isKeyError(error) || error.message === "KEY_RESELECT_REQUIRED") {
-      throw new Error("KEY_RESELECT_REQUIRED");
-    }
-    throw error;
+  } catch (e) {
+    if (isKeyError(e)) throw new Error("KEY_RESELECT_REQUIRED");
+    throw e;
   }
 };
 
-export const judgeInput = async (
-  mystery: MysteryData,
-  userInput: string,
-  targetId: string,
-  history: string[]
-): Promise<JudgeResponse> => {
-  
+export const judgeInput = async (mystery: MysteryData, userInput: string, targetId: string, history: string[]): Promise<JudgeResponse> => {
   const isGM = targetId === 'GM';
   const targetNPC = mystery.npcs.find(n => n.id === targetId);
 
-  const schema = {
-    type: Type.OBJECT,
-    properties: {
-      answerType: { 
-        type: Type.STRING, 
-        description: "One of YES, NO, IRRELEVANT, HINT, CLARIFICATION, NPC_DIALOGUE"
-      },
-      reply: { type: Type.STRING },
-      unlockedClueId: { type: Type.STRING, description: "Optional ID of a clue if it is revealed in this turn." },
-    },
-    required: ["answerType", "reply"],
-  };
-
-  const prompt = `
-    Mystery: "${mystery.title}"
-    True Solution: ${mystery.solution}
-    Clues List: ${JSON.stringify(mystery.clues.map(c => ({ id: c.id, desc: c.description })))}
-    Previous Interaction History: ${JSON.stringify(history)}
-    User Input: "${userInput}"
-    Current Interaction Target: ${isGM ? 'Game Master (provides objective Yes/No/Irrelevant facts)' : `NPC: ${targetNPC?.name} (Roleplays based on their personality)`}
-    ${!isGM ? `NPC Personality/Role: ${targetNPC?.personality}` : ''}
-    
-    Task: 
-    1. If target is GM: provide answerType (YES/NO/IRRELEVANT/HINT) and a short reply.
-    2. If target is an NPC: roleplay as them (NPC_DIALOGUE).
-    3. If the user's input leads to discovering one of the 'Clues List', return the 'unlockedClueId'.
-  `;
+  const prompt = `Mystery: "${mystery.title}". Solution: ${mystery.solution}. 
+    History: ${JSON.stringify(history)}. Input: "${userInput}". 
+    Target: ${isGM ? 'GM' : targetNPC?.name}. Personality: ${targetNPC?.personality}.
+    Task: Respond as target and check if any clue ID from ${JSON.stringify(mystery.clues.map(c => c.id))} is revealed.
+    Output JSON: { "answerType": "...", "reply": "...", "unlockedClueId": "..." }`;
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: isGM ? 0.1 : 0.8,
-      },
-    });
-
-    // Use .text property and trim it
-    return JSON.parse(response.text.trim()) as JudgeResponse;
-  } catch (error: any) {
-    if (isKeyError(error)) {
-      throw new Error("KEY_RESELECT_REQUIRED");
-    }
-    return {
-      answerType: AnswerType.CLARIFICATION,
-      reply: "信号闪烁... 请尝试重述您的问题。",
-      unlockedClueId: null
-    };
+    const text = await callGemini(prompt, isGM ? 0.1 : 0.8);
+    return JSON.parse(cleanJson(text)) as JudgeResponse;
+  } catch (e) {
+    if (isKeyError(e)) throw new Error("KEY_RESELECT_REQUIRED");
+    return { answerType: AnswerType.CLARIFICATION, reply: "信号闪烁...", unlockedClueId: null };
   }
 };
 
-export const evaluateSolution = async (
-  mystery: MysteryData,
-  playerTheory: string
-): Promise<EndingEvaluation> => {
-  const schema = {
-    type: Type.OBJECT,
-    properties: {
-      type: { type: Type.STRING, description: "One of 'BAD', 'NEUTRAL', 'GOOD'" },
-      narrative: { type: Type.STRING },
-      title: { type: Type.STRING }
-    },
-    required: ["type", "narrative", "title"],
-  };
-
-  const prompt = `
-    Real Solution: ${mystery.solution}
-    Defined Endings: ${JSON.stringify(mystery.endings)}
-    Player's Final Theory: "${playerTheory}"
-    
-    Critically evaluate if the player's theory matches the solution. Select the best ending and write a narrative wrap-up.
-  `;
+export const evaluateSolution = async (mystery: MysteryData, playerTheory: string): Promise<EndingEvaluation> => {
+  const prompt = `Solution: ${mystery.solution}. Theory: "${playerTheory}". 
+    Evaluate and pick an ending from ${JSON.stringify(mystery.endings)}.
+    Output JSON: { "type": "...", "narrative": "...", "title": "..." }`;
 
   try {
-     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-     const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-        temperature: 0.3,
-      },
-    });
-    // Use .text property and trim it
-    return JSON.parse(response.text.trim()) as EndingEvaluation;
-  } catch (e: any) {
-    if (isKeyError(e)) {
-      throw new Error("KEY_RESELECT_REQUIRED");
-    }
-    return { type: 'BAD', title: '思维断裂', narrative: '你的推理无法与现实接轨。' };
+    const text = await callGemini(prompt, 0.3);
+    return JSON.parse(cleanJson(text)) as EndingEvaluation;
+  } catch (e) {
+    if (isKeyError(e)) throw new Error("KEY_RESELECT_REQUIRED");
+    return { type: 'BAD', title: '思维断裂', narrative: '推理失败。' };
   }
 };
